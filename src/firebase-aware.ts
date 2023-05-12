@@ -1,10 +1,8 @@
 import type { Request } from 'firebase-functions/v2/https';
 import type { Response } from 'express';
-import { initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import { initializeApp as initializeAdminApp, getApps } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-// @ts-ignore
 import { initializeApp, deleteApp, FirebaseApp } from 'firebase/app';
-// @ts-ignore
 import { getAuth, signInWithCustomToken } from 'firebase/auth';
 import cookie from 'cookie';
 import LRU from 'lru-cache';
@@ -16,7 +14,9 @@ import {
     LRU_TTL
 } from './constants.js';
 
-const adminApp = initializeAdminApp();
+const ADMIN_APP_NAME = "firebase-frameworks";
+const adminApp = getApps().find(it => it.name === ADMIN_APP_NAME) ||
+    initializeAdminApp(undefined, ADMIN_APP_NAME);
 const adminAuth = getAdminAuth(adminApp);
 
 const firebaseAppsLRU = new LRU<string, FirebaseApp>({
@@ -33,7 +33,7 @@ const mintCookie = async (req: Request, res: Response) => {
     const idToken = req.header('Authorization')?.split('Bearer ')?.[1];
     const verifiedIdToken = idToken ? await adminAuth.verifyIdToken(idToken) : null;
     if (verifiedIdToken) {
-        if (new Date().getTime() / 1_000 - verifiedIdToken.auth_time > ID_TOKEN_MAX_AGE) {
+        if (new Date().getTime() / 1_000 - verifiedIdToken.iat > ID_TOKEN_MAX_AGE) {
             res.status(301).end();
         } else {
             const cookie = await adminAuth.createSessionCookie(idToken!, { expiresIn: COOKIE_MAX_AGE }).catch((e: any) => {
